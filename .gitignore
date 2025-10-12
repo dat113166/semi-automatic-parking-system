@@ -1,0 +1,9 @@
+# Môi trường ảo
+.venv/
+
+# File database 
+ingest_server/data/
+
+# Thư mục cache của Python
+__pycache__/
+*.pyc
