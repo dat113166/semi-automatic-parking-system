@@ -12,30 +12,52 @@ char_list = char_recognizer.model.names
 
 # --- 2. HÀM XỬ LÝ KẾT QUẢ (giữ nguyên hàm format_plate_text) ---
 def format_plate_text(char_detections):
-    if not char_detections: return ""
-    # Xác định các dòng dựa trên trung vị của tọa độ y
-    y_coords = [((char[1] + char[3]) / 2) for char in char_detections]
-    median_y = np.median(y_coords)
-    
-    line1, line2 = [], []
-    for char in char_detections:
-        char_center_y = (char[1] + char[3]) / 2
-        # Phân dòng dựa trên việc tâm ký tự ở trên hay dưới ngưỡng trung vị
-        # Thêm một khoảng đệm nhỏ (chiều cao trung bình của ký tự / 4) để xử lý biển số hơi nghiêng
-        char_height = char[3] - char[1]
-        if char_center_y < median_y + (char_height / 4):
-            line1.append(char)
-        else:
-            line2.append(char)
+    """
+    Sắp xếp các ký tự theo quy tắc chuẩn: TỪ TRÊN XUỐNG DƯỚI, TỪ TRÁI SANG PHẢI.
+    """
+    if not char_detections:
+        return ""
 
-    sorted_line1 = sorted(line1, key=lambda x: x[0])
-    sorted_line2 = sorted(line2, key=lambda x: x[0])
-    plate_text_line1 = "".join([char[4] for char in sorted_line1])
-    plate_text_line2 = "".join([char[4] for char in sorted_line2])
-    return f"{plate_text_line1}{plate_text_line2}"
+    # Xác định chiều cao trung bình của một ký tự
+    # để dùng làm ngưỡng phân biệt các hàng
+    avg_char_height = np.mean([char[3] - char[1] for char in char_detections])
+
+    # Sắp xếp tất cả các ký tự dựa trên tọa độ y trước tiên
+    # Điều này sẽ gom các ký tự cùng hàng lại với nhau
+    sorted_by_y = sorted(char_detections, key=lambda x: (x[1] + x[3]) / 2)
+
+    lines = []
+    current_line = [sorted_by_y[0]]
+
+    # Lặp qua các ký tự đã sắp xếp theo chiều dọc
+    for i in range(1, len(sorted_by_y)):
+        prev_char = current_line[-1]
+        current_char = sorted_by_y[i]
+        
+        # Lấy tâm y của ký tự trước và ký tự hiện tại
+        prev_center_y = (prev_char[1] + prev_char[3]) / 2
+        current_center_y = (current_char[1] + current_char[3]) / 2
+        
+        # Nếu khoảng cách theo chiều dọc nhỏ (cùng một hàng)
+        if abs(current_center_y - prev_center_y) < avg_char_height * 0.7:
+            current_line.append(current_char)
+        else: # Nếu khoảng cách lớn (sang hàng mới)
+            lines.append(current_line)
+            current_line = [current_char]
+    
+    # Thêm dòng cuối cùng vào
+    lines.append(current_line)
+
+    plate_text = ""
+    # Sắp xếp từng dòng theo tọa độ x và ghép lại
+    for line in lines:
+        sorted_line = sorted(line, key=lambda x: x[0])
+        plate_text += "".join([char[4] for char in sorted_line])
+
+    return plate_text
 
 # --- 3. KHỞI ĐỘNG CAMERA VÀ VÒNG LẶP CHÍNH ---
-URL = "http://10.168.9.51:8080/video"
+URL = "http://192.168.110.127:8080/video"
 cap = cv2.VideoCapture(URL)
 if not cap.isOpened():
     print("Lỗi: Không thể mở camera")
