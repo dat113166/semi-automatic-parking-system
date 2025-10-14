@@ -9,7 +9,7 @@ import os
 # ---- Cấu hình ----
 BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8000")
 SECRET_KEY = os.getenv("SECRET_KEY", "my-very-strong-secret")
-CAMERA_STREAM_URL = os.getenv("CAMERA_STREAM_URL", "http://192.168.110.127:8080/video")
+CAMERA_STREAM_URL = os.getenv("CAMERA_STREAM_URL", "http://192.168.1.3:8080/video")
 POLL_INTERVAL_SECONDS = 2 # Thời gian chờ giữa các lần hỏi việc
 
 # ---- Tải các mô hình ----
