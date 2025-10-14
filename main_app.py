@@ -7,10 +7,12 @@ import numpy as np
 # --- 1. TẢI CÁC MÔ HÌNH ---
 plate_detector = YOLO('models/plate_detector.pt')
 char_recognizer = YOLO('models/char_recognizer.pt')
-char_list = char_recognizer.model.names
+CHAR_CLASS_NAMES = char_recognizer.model.names
 
 
 # --- 2. HÀM XỬ LÝ KẾT QUẢ (giữ nguyên hàm format_plate_text) ---
+LINE_SEPARATION_THRESHOLD_FACTOR = 0.7 # Ngưỡng để xác định ký tự có cùng hàng hay không
+
 def format_plate_text(char_detections):
     """
     Sắp xếp các ký tự theo quy tắc chuẩn: TỪ TRÊN XUỐNG DƯỚI, TỪ TRÁI SANG PHẢI.
@@ -39,7 +41,7 @@ def format_plate_text(char_detections):
         current_center_y = (current_char[1] + current_char[3]) / 2
         
         # Nếu khoảng cách theo chiều dọc nhỏ (cùng một hàng)
-        if abs(current_center_y - prev_center_y) < avg_char_height * 0.7:
+        if abs(current_center_y - prev_center_y) < avg_char_height * LINE_SEPARATION_THRESHOLD_FACTOR:
             current_line.append(current_char)
         else: # Nếu khoảng cách lớn (sang hàng mới)
             lines.append(current_line)
@@ -57,8 +59,8 @@ def format_plate_text(char_detections):
     return plate_text
 
 # --- 3. KHỞI ĐỘNG CAMERA VÀ VÒNG LẶP CHÍNH ---
-URL = "http://192.168.110.127:8080/video"
-cap = cv2.VideoCapture(URL)
+CAMERA_STREAM_URL = "http://192.168.110.127:8080/video"
+cap = cv2.VideoCapture(CAMERA_STREAM_URL)
 if not cap.isOpened():
     print("Lỗi: Không thể mở camera")
     exit()
@@ -73,7 +75,7 @@ panel_color = (0, 0, 0) # Màu đen
 debug_plate_size = (200, 60) # Kích thước cố định cho ảnh biển số crop
 
 # --- 4. BẮT ĐẦU TRACKING ---
-results_generator = plate_detector.track(source=URL, show=False, stream=True, persist=True)
+results_generator = plate_detector.track(source=CAMERA_STREAM_URL, show=False, stream=True, persist=True)
 
 for frame_results in results_generator:
     frame = frame_results.orig_img
@@ -112,7 +114,7 @@ for frame_results in results_generator:
                 for char in chars.boxes.data.tolist():
                     cx1, cy1, cx2, cy2, c_score, c_class_id = char
                     if c_score < 0.5: continue
-                    char_name = char_list[int(c_class_id)]
+                    char_name = CHAR_CLASS_NAMES[int(c_class_id)]
                     char_detections_for_plate.append([cx1, cy1, cx2, cy2, char_name])
 
                 plate_text = format_plate_text(char_detections_for_plate) or "READING..."
