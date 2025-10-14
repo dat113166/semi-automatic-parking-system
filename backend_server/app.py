@@ -52,7 +52,7 @@ async def trigger_capture(auth=Depends(require_secret)):
     return {"ok": True}
 
 @app.get("/barrier_command")
-async def get_barrier_command(auth=Depends(require_secret)):
+async def consume_barrier_command(auth=Depends(require_secret)):
     async with app.state.lock:
         cmd = app.state.barrier_command
         if cmd == "open":
@@ -61,7 +61,7 @@ async def get_barrier_command(auth=Depends(require_secret)):
 
 # ---- AI Worker ----
 @app.get("/capture_request")
-async def get_capture_request(auth=Depends(require_secret)):
+async def consume_capture_request(auth=Depends(require_secret)):
     async with app.state.lock:
         should = app.state.capture_requested
         if should:
