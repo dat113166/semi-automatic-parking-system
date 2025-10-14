@@ -37,6 +37,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS sessions (
           session_id TEXT PRIMARY KEY,
           plate_text TEXT,
+          vehicle_type TEXT,
           time_in TEXT NOT NULL,
           time_out TEXT,
           card_id TEXT NOT NULL,
@@ -70,6 +71,7 @@ class CardPayload(BaseModel):
 class PlateUpdatePayload(BaseModel):
     session_id: str
     plate_text: str
+    vehicle_type: Optional[str] = None
 
 # ---- API for ESP32 ----
 @app.post("/check-in", status_code=201)
@@ -173,8 +175,8 @@ async def update_session_plate(payload: PlateUpdatePayload, auth=Depends(require
             raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found or not pending plate update.")
 
         cur.execute(
-            "UPDATE sessions SET plate_text=?, status='CHECKED_IN' WHERE session_id=?",
-            (plate_text, session_id)
+            "UPDATE sessions SET plate_text=?, vehicle_type=?, status='CHECKED_IN' WHERE session_id=?",
+            (plate_text, payload.vehicle_type, session_id)
         )
 
     async with app.state.lock:
