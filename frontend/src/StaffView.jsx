@@ -8,14 +8,9 @@ function StaffView() {
   const [notifications, setNotifications] = useState([])
   const [cameraError, setCameraError] = useState('')
   const [capturedImage] = useState(null)
-  const [cardId, setCardId] = useState('')
-  const [lane, setLane] = useState('')
-  const [sessionId, setSessionId] = useState(null)
-  const [isPolling, setIsPolling] = useState(false)
 
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
-  const pollRef = useRef(null)
 
   const pushNotification = (message, type = 'info') => {
     const id = `${Date.now()}-${Math.random()}`
@@ -73,57 +68,21 @@ function StaffView() {
     }
   }, [])
 
-  useEffect(() => {
-    return () => {
-      if (pollRef.current) {
-        clearInterval(pollRef.current)
-        pollRef.current = null
-      }
-    }
-  }, [])
-
   const handleCapture = async () => {
     try {
-      pushNotification('Khởi tạo phiên và yêu cầu chụp ảnh...', 'info')
+      pushNotification('Gửi yêu cầu chụp ảnh tới backend...', 'info')
       setDetectedPlate('')
       setMemberInfo(null)
 
-      const res = await api.checkIn({
-        cardId: cardId || undefined,
-        lane: lane || undefined,
-        plateText: undefined,
-        vehicleType: undefined,
-      })
-      if (res && res.session_id) {
-        setSessionId(res.session_id)
-        pushNotification('Đã tạo phiên, đang chờ nhận diện...', 'success')
-
-        // Start polling events for this session until CHECKED_IN with plate_text
-        setIsPolling(true)
-        if (pollRef.current) clearInterval(pollRef.current)
-        pollRef.current = setInterval(async () => {
-          try {
-            const events = await api.getEvents(50)
-            const list = (events && events.events) || []
-            const found = list.find(e => e.session_id === res.session_id)
-            if (found && found.status === 'CHECKED_IN' && found.plate_text) {
-              setDetectedPlate(found.plate_text)
-              pushNotification(`Đã nhận diện: ${found.plate_text}`, 'success')
-              clearInterval(pollRef.current)
-              pollRef.current = null
-              setIsPolling(false)
-            }
-          } catch (err) {
-            console.error(err)
-          }
-        }, 2000)
+      const res = await api.captureTask()
+      if (res && res.task === 'capture_plate') {
+        pushNotification('Backend đã bắt đầu chụp ảnh biển số', 'success')
       } else {
-        pushNotification('Không tạo được phiên chụp ảnh', 'error')
+        pushNotification('Backend không thể bắt đầu chụp ảnh', 'error')
       }
     } catch (err) {
       console.error(err)
-      const msg = (err && (err.message || (err.data && (err.data.message || err.data.detail)))) || 'Lỗi check-in tới backend'
-      pushNotification(msg, 'error')
+      pushNotification('Lỗi gửi yêu cầu chụp ảnh tới backend', 'error')
     }
   }
 
@@ -148,24 +107,7 @@ function StaffView() {
               )}
               <canvas ref={canvasRef} style={{ display: 'none' }} />
             </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
-            <input
-              placeholder="Card ID (tuỳ chọn)"
-              value={cardId}
-              onChange={(e) => setCardId(e.target.value)}
-              style={{ padding: '8px 10px', border: '1px solid #ddd', borderRadius: 6, flex: 1 }}
-            />
-            <input
-              placeholder="Lane (tuỳ chọn)"
-              value={lane}
-              onChange={(e) => setLane(e.target.value)}
-              style={{ padding: '8px 10px', border: '1px solid #ddd', borderRadius: 6, width: 160 }}
-            />
-            <button className="capture-btn" onClick={handleCapture}>Tạo phiên & chụp</button>
-          </div>
-          <div style={{ marginTop: 8, fontSize: 12, color: '#888' }}>
-            {sessionId ? `Session: ${sessionId}${isPolling ? ' • Đang nhận diện...' : ''}` : 'Chưa tạo phiên'}
-          </div>
+            <button className="capture-btn" onClick={handleCapture}>Chụp ảnh</button>
           </section>
 
           <aside className="side-panel">
