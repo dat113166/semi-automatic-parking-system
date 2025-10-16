@@ -217,7 +217,7 @@ def safe_crop(img, x1,y1,x2,y2):
 # =========================
 # 4) CAMERA & UI
 # =========================
-URL = "http://192.168.1.3:8080/video"  # đổi URL nếu dùng IP webcam phone
+URL = "http://10.146.44.250:8080/video"  # đổi URL nếu dùng IP webcam phone
 # cap = cv2.VideoCapture(0)  # dùng webcam máy tính thì bật dòng này và tắt dòng URL
 cap = cv2.VideoCapture(URL)
 if not cap.isOpened():

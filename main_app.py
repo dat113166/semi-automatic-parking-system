@@ -37,26 +37,32 @@ def normalize_plate(s: str) -> str:
 
 # ---- Hàm xử lý biển số (bạn đã có) ----
 def format_plate_text(char_detections):
-    # char_detections: list [x1, y1, x2, y2, char_label]
-    if not char_detections: return ""
-    avg_char_height = np.mean([char[3] - char[1] for char in char_detections])
-    sorted_by_y = sorted(char_detections, key=lambda x: (x[1] + x[3]) / 2)
-    lines, current_line = [], [sorted_by_y[0]]
-    for i in range(1, len(sorted_by_y)):
-        prev_char, current_char = current_line[-1], sorted_by_y[i]
-        prev_center_y = (prev_char[1] + prev_char[3]) / 2
-        current_center_y = (current_char[1] + current_char[3]) / 2
-        if abs(current_center_y - prev_center_y) < avg_char_height * LINE_SEPARATION_THRESHOLD_FACTOR:
-            current_line.append(current_char)
-        else:
-            lines.append(current_line)
-            current_line = [current_char]
-    lines.append(current_line)
-    plate_text = ""
-    for line in lines:
-        sorted_line = sorted(line, key=lambda x: x[0])  # sort theo x1
-        plate_text += "".join([char[4] for char in sorted_line])
-    return plate_text
+    if not char_detections:
+        return ""
+    avg_h = np.mean([y2 - y1 for x1, y1, x2, y2, _ in char_detections])
+    if avg_h <= 0:
+        return ""
+
+    # tách 2 dòng bằng K-means 2 cụm trên toạ độ y
+    cy = np.array([(y1 + y3) / 2 for (_, y1, _, y3, _) in char_detections])
+    from sklearn.cluster import KMeans
+    if len(char_detections) > 3:
+        km = KMeans(n_clusters=2, n_init=5).fit(cy.reshape(-1, 1))
+        labels = km.labels_
+        groups = [[], []]
+        for g, c in zip(labels, char_detections):
+            groups[g].append(c)
+        # sắp theo vị trí trên–dưới
+        groups.sort(key=lambda L: np.mean([(c[1] + c[3]) / 2 for c in L]))
+    else:
+        groups = [char_detections]
+
+    # sắp trái→phải trong từng dòng
+    lines = []
+    for g in groups:
+        g.sort(key=lambda c: c[0])
+        lines.append("".join([c[4] for c in g]))
+    return " ".join(lines)
 
 # ---- Helpers cho Burst Voting ----
 def pick_best_plate_box(plate_results):
