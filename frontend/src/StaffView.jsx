@@ -7,7 +7,7 @@ function StaffView() {
   const [memberInfo, setMemberInfo] = useState(null)
   const [notifications, setNotifications] = useState([])
   const [cameraError, setCameraError] = useState('')
-  const [capturedImage] = useState(null)
+  const [capturedImage, setCapturedImage] = useState(null)
 
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
@@ -70,19 +70,62 @@ function StaffView() {
 
   const handleCapture = async () => {
     try {
-      pushNotification('Gửi yêu cầu chụp ảnh tới backend...', 'info')
+      if (!videoRef.current) {
+        pushNotification('Camera chưa sẵn sàng', 'error')
+        return
+      }
+      // Chụp khung hình từ video -> blob jpeg
+      const video = videoRef.current
+      const canvas = canvasRef.current
+      const w = video.videoWidth || 640
+      const h = video.videoHeight || 480
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(video, 0, 0, w, h)
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9))
+      if (!blob) {
+        pushNotification('Không thể chụp ảnh từ camera', 'error')
+        return
+      }
+
       setDetectedPlate('')
       setMemberInfo(null)
+      pushNotification('Đang tải ảnh lên máy chủ...', 'info')
+      const { task_id } = await api.uploadImage(blob)
+      const imgUrl = URL.createObjectURL(blob)
+      setCapturedImage(imgUrl)
+      pushNotification('Ảnh đã tải lên, đang nhận dạng...', 'success')
 
-      const res = await api.captureTask()
-      if (res && res.task === 'capture_plate') {
-        pushNotification('Backend đã bắt đầu chụp ảnh biển số', 'success')
-      } else {
-        pushNotification('Backend không thể bắt đầu chụp ảnh', 'error')
+      // Poll kết quả
+      const start = Date.now()
+      const TIMEOUT = 20000
+      const INTERVAL = 1000
+      let done = false
+      while (!done && Date.now() - start < TIMEOUT) {
+        await new Promise((r) => setTimeout(r, INTERVAL))
+        try {
+          const st = await api.taskStatus(task_id)
+          if (st.status === 'done') {
+            done = true
+            if (st.plate_text) {
+              setDetectedPlate(st.plate_text)
+              pushNotification(`Đã nhận dạng: ${st.plate_text}`, 'success')
+            } else {
+              pushNotification('Không đọc được biển số từ ảnh', 'warning')
+            }
+            break
+          }
+        } catch {
+          // continue polling quietly
+        }
+      }
+      if (!done) {
+        pushNotification('Nhận dạng quá thời gian chờ', 'error')
       }
     } catch (err) {
       console.error(err)
-      pushNotification('Lỗi gửi yêu cầu chụp ảnh tới backend', 'error')
+      pushNotification('Lỗi chụp hoặc tải ảnh lên', 'error')
     }
   }
 

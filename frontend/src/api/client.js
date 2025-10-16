@@ -61,6 +61,35 @@ export const api = {
 
   // Ask backend to start capture task
   captureTask: () => http('GET', '/capture-task'),
+
+  // Image upload flow
+  uploadImage: async (blob, { sessionId } = {}) => {
+    if (!BASE_URL) throw new Error('VITE_BACKEND_URL is not configured')
+    const url = new URL(`${BASE_URL}/upload-image`)
+    const form = new FormData()
+    form.append('image', blob, 'capture.jpg')
+    if (sessionId) form.append('session_id', sessionId)
+    // Build headers WITHOUT Content-Type so browser sets multipart boundary
+    const headers = {}
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_BACKEND_SECRET) {
+      headers['X-Secret'] = import.meta.env.VITE_BACKEND_SECRET
+    }
+    const res = await fetch(url.toString(), {
+      method: 'POST',
+      headers,
+      body: form,
+      credentials: 'include',
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      const err = new Error(data?.detail || res.statusText)
+      err.status = res.status
+      err.data = data
+      throw err
+    }
+    return data
+  },
+  taskStatus: (taskId) => http('GET', `/task-status/${taskId}`),
 }
 
 export default api
