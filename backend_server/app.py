@@ -1,5 +1,6 @@
 # backend_server/app.py
 import os, sqlite3, uuid
+import subprocess, sys
 from fastapi import FastAPI, HTTPException, Body, Header, Depends
 from pydantic import BaseModel
 from typing import Optional
@@ -62,6 +63,7 @@ def require_secret(x_secret: Optional[str] = Header(None, alias="X-Secret")):
 app.state.capture_queue = []
 app.state.barrier_command = "close"
 app.state.lock = asyncio.Lock()
+app.state.ai_worker_proc = None
 
 # ---- Models ----
 class CardPayload(BaseModel):
@@ -194,3 +196,47 @@ async def list_events(limit: int = 50, auth=Depends(require_secret)):
             (limit,)
         ).fetchall()
     return {"events": [dict(r) for r in rows]}
+
+# ---- Lifecycle events: start/stop AI worker ----
+@app.on_event("startup")
+async def start_ai_worker():
+    try:
+        # Avoid duplicate workers if already running
+        existing = getattr(app.state, "ai_worker_proc", None)
+        if existing and existing.poll() is None:
+            print("[AI Worker] Already running, skipping startup.")
+            return
+
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        worker_script = os.path.join(project_root, "main_app.py")
+        if not os.path.exists(worker_script):
+            print(f"[AI Worker] Worker script not found at {worker_script}")
+            return
+
+        env = os.environ.copy()
+        # Ensure worker uses the same secret and backend URL defaults
+        env.setdefault("SECRET_KEY", SECRET)
+        env.setdefault("BACKEND_URL", env.get("BACKEND_URL", "http://127.0.0.1:8000"))
+
+        proc = subprocess.Popen([sys.executable, worker_script], cwd=project_root, env=env)
+        app.state.ai_worker_proc = proc
+        print(f"[AI Worker] Started with PID {proc.pid}")
+    except Exception as e:
+        print(f"[AI Worker] Failed to start: {e}")
+
+
+@app.on_event("shutdown")
+async def stop_ai_worker():
+    proc = getattr(app.state, "ai_worker_proc", None)
+    if proc and proc.poll() is None:
+        print(f"[AI Worker] Stopping PID {proc.pid}...")
+        try:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+                print("[AI Worker] Stopped gracefully.")
+            except Exception:
+                proc.kill()
+                print("[AI Worker] Killed.")
+        except Exception as e:
+            print(f"[AI Worker] Error stopping worker: {e}")
